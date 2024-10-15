@@ -6,20 +6,52 @@ class BaseTokenizer:
         self.merges = {}
         self.vocab = {}
 
-    def get_stats(self, tokens):
-        count = {}
-        for pair in zip(tokens, tokens[1:]):
-            count[pair] = count.get(pair, 0) + 1
+    def decode(self, ids):
+        tokens = b"".join([self.vocab[id] for id in ids])
+        string = tokens.decode("utf-8", errors="replace")
 
-        with open("./data/stats.txt", "w", encoding="utf-8") as f:
-            for i, (key, value) in enumerate(count.items()):
-                content = f"{i}. ({key[0]}, {key[1]} has count: {value})\n"
+        return string
+
+    def encode(self, text):
+        tokens = text.encode("utf-8", errors="replace")
+
+        while len(tokens) >= 2:
+            success = False
+
+            for key, value in self.merges.items():
+                old_length = len(tokens)
+
+                tokens = self.merge(
+                    tokens, key, value, save=False)
+
+                if len(tokens) < old_length:
+                    success = True
+
+            if not success:
+                break
+
+        return tokens
+
+    def get_stats(self, tokens):
+        stats = {}
+        for pair in zip(tokens, tokens[1:]):
+            stats[pair] = stats.get(pair, 0) + 1
+
+        self.save_stats(stats)
+
+        return stats
+
+    def save_stats(self, stats, path="./data/base/stats.csv"):
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("Byte pair, Frequency\n")
+            for i, (key, value) in enumerate(stats.items()):
+                content = f"({key[0]}, {key[1]}), -> [{value}]\n"
                 f.write(content)
 
-        return count
-
-    def merge(self, tokens, byte_pair_max: tuple, new_pair_representation: int):
-        self.merges[byte_pair_max] = new_pair_representation
+    def merge(self, tokens, byte_pair_max: tuple, new_pair_representation: int, save=True):
+        if save:
+            self.merges[byte_pair_max] = new_pair_representation
 
         i = 0
         new_tokens = []
@@ -34,25 +66,28 @@ class BaseTokenizer:
 
         return new_tokens
 
-    def build_vocab(self):
+    def build_vocab(self, path="./data/base/vocab.csv"):
         vocab = {i: bytes([i]) for i in range(256)}
 
         # loop through merges in order of insertion
-        with open("./data/vocab.csv", "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"Byte 1, Byte 2, Combined byte\n")
             for key, value in self.merges.items():
                 vocab[value] = vocab[key[0]] + vocab[key[1]]
 
-                # char1 = b"".join((vocab[key[0]]))
-                # char1 = char1.decode("utf-8", errors="replace")
                 char1 = vocab[key[0]].decode("utf-8", errors="replace")
-                print(char1)
+                char2 = vocab[key[1]].decode("utf-8", errors="replace")
+
+                char_transform = vocab[value].decode("utf-8", errors="replace")
+
+                f.write(f"[{char1}], [{char2}], -> [{char_transform}]\n")
 
         self.vocab = vocab
 
-    def visualize_merges(self):
+    def visualize_merges(self, path="./data/base/merges.csv"):
         merges = sorted(((value, key) for key, value in self.merges.items()))
 
-        with open("./data/merges.csv", "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(f"Byte 1, Byte 2, Merged byte value\n")
 
             for key_value_pair in merges:
@@ -79,11 +114,90 @@ class BaseTokenizer:
                 print(f"Before merging: {old_length}")
                 print(f"After merging: {len(tokens)}")
 
+        self.build_vocab()
+        self.visualize_merges()
+
+        return tokens
+
+
+class RegixTokenizer(BaseTokenizer):
+    def __init__(self):
+        super().__init__()
+        self.gpt4_split_pattern = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
+
+    def get_stats(self, tokens, stats=dict):
+        if len(tokens) >= 2:
+            for pair in zip(tokens, tokens[1:]):
+                stats[pair] = stats.get(pair, 0) + 1
+
+    def decode(self, ids_chunk: list) -> str:
+        tokens = b""
+        for ids in ids_chunk:
+            current_token = b"".join([self.vocab[id] for id in ids])
+            tokens += current_token
+
+        string = tokens.decode(encoding="utf-8", errors="replace")
+        return string
+
+    def encode(self, text):
+        text_chunks = re.findall(self.gpt4_split_pattern, text)
+        tokens = [list(ch.encode("utf-8")) for ch in text_chunks]
+
+        for i in range(len(tokens)):
+            ids = tokens[i]
+
+            # deal with current ids
+            while len(ids) >= 2:
+                success = False
+
+                for key, value in self.merges.items():
+                    old_length = len(ids)
+                    ids = self.merge(tokens=ids, byte_pair_max=key,
+                                     new_pair_representation=value, save=False)
+
+                    if len(ids) < old_length:
+                        success = True
+
+                if not success:
+                    break
+
+            tokens[i] = ids
+
+        return tokens
+
+    def train(self, text: str, vocab_size: int, verbose: bool = False):
+        text_chunks = re.findall(self.gpt4_split_pattern, text)
+        tokens = [list(ch.encode("utf-8")) for ch in text_chunks]
+        train_iterations = vocab_size - 256
+
+        for n in range(train_iterations):
+            stats = {}
+            for chunk in tokens:
+                self.get_stats(tokens=chunk, stats=stats)
+            self.save_stats(stats=stats, path="./data/regex/stats.csv")
+
+            byte_pair_max = max(stats, key=stats.get)
+
+            old_length = sum([len(chunk) for chunk in tokens])
+            tokens = [self.merge(tokens=chunk, byte_pair_max=byte_pair_max,
+                                 new_pair_representation=256 + n) for chunk in tokens]
+            new_length = sum([len(chunk) for chunk in tokens])
+
+            if verbose:
+                print(f"byte pair max: {byte_pair_max}")
+                print(f"byte pair max frequency: {stats.get(byte_pair_max)}")
+
+                print(f"Before merging: {old_length}")
+                print(f"After merging: {new_length}")
+
+            self.build_vocab(path="./data/regex/vocab.csv")
+            self.visualize_merges(path="./data/regex/merges.csv")
+
         return tokens
 
 
 if __name__ == "__main__":
-    base_tokenizer = BaseTokenizer()
+    regex_tokenizer = RegixTokenizer()
 
     file_content = ""
     with open("./data/taylorswift.txt", "r") as f:
@@ -92,8 +206,5 @@ if __name__ == "__main__":
             file_content += content
             content = f.readline()
 
-    tokens = base_tokenizer.train(
+    regex_tokens = regex_tokenizer.train(
         text=file_content, vocab_size=100+256, verbose=False)
-
-    base_tokenizer.build_vocab()
-    base_tokenizer.visualize_merges()
