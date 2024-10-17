@@ -131,6 +131,74 @@ def read_intention_data(path):
     return content
 
 
+def save_file_for_intention_multiclass(path):
+    filename = os.path.basename(path)
+    filename = filename.split(".")
+    output_file = os.path.join(
+        ".", "data", "intention", f"{filename[0]}_multiclass" + ".txt")
+
+    dominants = {"TRADEMARK": 0, "CUSTOMER_SUPPORT": 1, "OTHER": 2}
+
+    with open(output_file, "w", encoding="utf-8") as output:
+        output.write("id,label,value\n")
+
+        with open(path, "r", encoding="utf-8") as input:
+            file_line = input.readline()
+            counter = 0
+
+            # process 1 record at a time
+            while file_line:
+                file_line = file_line.split(" ")
+                value = []
+                label = None
+
+                for split in file_line:
+                    if "__label__" in split:
+                        label_value = split.split("#")[0]
+                        label_value = label_value.split("__label__")[-1]
+
+                        if label == None and label_value in dominants:
+                            label = dominants[label_value]
+                        elif label == None:
+                            label = 2
+                    else:
+                        value.append(split)
+
+                value = " ".join(value).strip()
+                output.write(f'{counter},{label},{value}\n')
+
+                # update variables
+                counter += 1
+                file_line = input.readline()
+
+
+def read_intention_data_multiclass(path):
+    content = {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        headers = f.readline()
+
+        for head in headers.split(","):
+            head = head.strip()
+            content[head] = []
+
+        line = f.readline()
+
+        while line:
+            line_content = line.split(",")
+
+            content["id"].append(int(line_content[0]))
+            content["label"].append(int(line_content[1]))
+            content["value"].append(str(line_content[2]))
+
+            line = f.readline()
+
+    return content
+
+
 if __name__ == "__main__":
-    save_file_for_intention("./data/train.txt")
-    save_file_for_intention("./data/test.txt")
+    # save_file_for_intention("./data/train.txt")
+    # save_file_for_intention("./data/test.txt")
+
+    save_file_for_intention_multiclass("./data/train.txt")
+    save_file_for_intention_multiclass("./data/test.txt")

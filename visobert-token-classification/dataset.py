@@ -2,8 +2,8 @@ import os
 
 
 def build_entity_tokens():
-    entity_token_names = ["PATIENT_ID", "PERSON_NAME",
-                          "AGE", "GENDER", "OCCUPATION", "LOCATION", "ORGANIZATION", "SYMPTON&DISEASE", "TRANSPORTATION", "DATE"]
+    entity_token_names = ["PATIENT_ID", "NAME",
+                          "AGE", "GENDER", "JOB", "LOCATION", "ORGANIZATION", "SYMPTOM_AND_DISEASE", "TRANSPORTATION", "DATE"]
 
     position_prefix = ["B-", "I-"]
 
@@ -48,5 +48,6 @@ def read_ner_file(path):
 
 
 if __name__ == "__main__":
-    entites = read_ner_file("./data/syllable/train_syllable.conll")
-    print(entites)
+    # entites = read_ner_file("./data/syllable/train_syllable.conll")
+    # print(entites)
+    print(build_entity_tokens())
