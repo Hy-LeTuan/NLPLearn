@@ -16,6 +16,7 @@ n_embed = 384
 n_head = 6
 n_layer = 6
 dropout = 0.2
+max_new_tokens = 500
 device = "cuda" if torch.cuda.is_available() else "cpu"
 # ----------
 
@@ -88,6 +89,37 @@ class Head(nn.Module):
             torch.ones(block_size, block_size)))
 
         self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        k = self.key(x)
+        q = self.query(x)
+
+        wei = q @ k.transpose(-2, -1) * C ** -0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
+        wei = F.softmax(wei, dim=-1)
+        wei = self.dropout(wei)
+
+        v = self.value(x)
+        out = wei @ v
+        return out
+
+
+class HeadCached(nn.Module):
+    def __init__(self, head_size):
+        super().__init__()
+        self.query = nn.Linear(n_embed, head_size)
+        self.key = nn.Linear(n_embed, head_size)
+        self.value = nn.Linear(n_embed, head_size)
+        self.register_buffer("tril", torch.tril(
+            torch.ones(block_size, block_size)))
+
+        self.dropout = nn.Dropout(dropout)
+
+        self.register_buffer("k_cache", torch.zeros(
+            (batch_size, max_new_tokens, head_size)))
+        self.register_buffer("v_cache", torch.zeros(
+            (batch_size, max_new_tokens, head_size)))
 
     def forward(self, x):
         B, T, C = x.shape
