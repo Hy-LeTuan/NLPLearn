@@ -2,12 +2,10 @@ from graphviz import Digraph
 
 
 class Value:
-    def __init__(self, data, _children=(), _op='', label=''):
+    def __init__(self, data, _children=(), _op=''):
         self.data = data
         self._prev = set(_children)
-        self.grad = 0.0
         self._op = _op
-        self.label = label
 
     def __repr__(self):
         return f"Value(data={self.data})"
@@ -39,29 +37,14 @@ def trace(root):
 
 
 def draw_dot(root):
-    dot = Digraph(format="svg", graph_attr={"rankdir": "LR"})
-
     nodes, edges = trace(root)
     for n in nodes:
         uid = str(id(n))
         # for any value in graph, create a node for it
-        dot.node(name=uid, label="{ %s | data %.4f | grad %.4f }" % (n.label, n.data, n.grad), shape="record")
-
-        # create nodes and edges for operators
-        if n._op:
-            dot.node(name=uid + n._op, label=n._op)
-            dot.edge(uid + n._op, uid)
-
-    for n1, n2 in edges:
-        dot.edge(str(id(n1)), str(id(n2)) + n2._op)
-
-    return dot
-
 
 if __name__ == "__main__":
-    a = Value(2.0, label='a')
-    b = Value(3.0, label='b')
-    c = a + b
-    c.label = 'c'
-    res = draw_dot(c)
-    res.render("example", format="png", cleanup=True)
+    a = Value(2.0)
+    b = Value(3.0)
+
+    print(a + b)
+    print(a * b)
