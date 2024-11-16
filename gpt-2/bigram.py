@@ -2,19 +2,20 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 # hyperparameters
 
 # when decreasing learning rate, increase number of iterations
 batch_size = 64
-block_size = 256
+block_size = 128
 max_iters = 3000
 eval_interval = 300
 eval_iters = 200
 lr = 3e-4
 n_embed = 384
 n_head = 6
-n_layer = 6
+n_layer = 4
 dropout = 0.2
 max_new_tokens = 500
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -226,7 +227,7 @@ model = model.to(device)
 # optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
-for iter in range(max_iters):
+for iter in tqdm(range(max_iters), total=max_iters):
     if iter % eval_interval == 0:
         losses = estimate_loss()
         print(
